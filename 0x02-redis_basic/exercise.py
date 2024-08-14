@@ -3,7 +3,19 @@
 
 import redis
 from uuid import uuid4
-from typing import Union, Callable, Optional, Any
+from typing import Any, Callable, Optional, Union
+from functools import wraps
+
+
+def count_calls(method: Callable) -> Callable:
+    """docorator that counts the number of times a function is called"""
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        # Incrememt the counter for the method using its qualified name
+        key = f"{method.__qualname__}_calls"
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
+    return wrapper
 
 
 class Cache:
@@ -12,6 +24,7 @@ class Cache:
         self._redis = redis.Redis()
         self._redis.flushdb()
 
+    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """
         store the input data in redis and
@@ -21,7 +34,7 @@ class Cache:
         self._redis.set(key, data)
         return key
 
-    def get(self, key: str, fn: Optional[Callable] = None) -> None:
+    def get(self, key: str, fn: Optional[Callable] = None) -> Any:
         """
         retrieve data from redis and apply an optional conversion function
         """
@@ -33,10 +46,10 @@ class Cache:
             return self.get_int(value)
         if fn is str:
             return self.get_str(value)
-        if Callable(fn):
+        if callable(fn):
             return fn(value)
 
-    def get_str(self, key: str) -> Optional(str):
+    def get_str(self, data: bytes) -> Optional[str]:
         """
         retrieve a string from redis and decode it using UTF-8
         """
